@@ -1,14 +1,30 @@
 {
   "name": "must_inverter",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop must-inverter",
+    "pm2:restart": "pm2 restart must-inverter",
+    "pm2:delete": "pm2 delete must-inverter",
+    "pm2:logs": "pm2 logs must-inverter",
+    "pm2:status": "pm2 status"
   },
-  "author": "",
+  "author": "xxx87",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "modbus-serial": "^8.0.23"
+    "@influxdata/influxdb-client": "^1.35.0",
+    "body-parser": "^2.2.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "modbus-serial": "^8.0.23",
+    "mqtt": "^5.14.1",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "pm2": "^5.3.0"
   }
 }

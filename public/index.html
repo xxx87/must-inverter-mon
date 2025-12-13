@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Must PV18 Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      body {
+        background: #1a1a1a;
+        color: #fff;
+        font-family: sans-serif;
+        margin: 0;
+        padding: 10px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+      }
+      .card {
+        background: #2d2d2d;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+      }
+      .val {
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #4caf50;
+      }
+      .label {
+        color: #aaa;
+        font-size: 0.9em;
+      }
+      .negative {
+        color: #ff5252;
+      }
+      .positive {
+        color: #4caf50;
+      }
+
+      canvas {
+        max-height: 250px;
+        width: 100%;
+        margin-top: 20px;
+      }
+
+      .controls {
+        margin-top: 20px;
+        background: #2d2d2d;
+        padding: 15px;
+        border-radius: 10px;
+      }
+      button {
+        background: #2196f3;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 1em;
+        cursor: pointer;
+      }
+      button:active {
+        background: #1976d2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid">
+      <div class="card">
+        <div class="label">Напруга АКБ</div>
+        <div class="val" id="bat_v">--</div>
+        <div class="label">Вольт</div>
+      </div>
+      <div class="card">
+        <div class="label">Навантаження Дому</div>
+        <div class="val negative" id="load_w">--</div>
+        <div class="label">Ватт</div>
+      </div>
+      <div class="card">
+        <div class="label">Мережа (Grid)</div>
+        <div class="val" id="grid_w">--</div>
+        <div class="label">Ватт (<span id="grid_dir">...</span>)</div>
+      </div>
+      <div class="card">
+        <div class="label">Статус</div>
+        <div class="val" style="font-size: 1.5em; color: #ffc107" id="status">Сканування...</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 15px">
+      <canvas id="mainChart"></canvas>
+    </div>
+
+    <div class="controls">
+      <h3>Швидкі налаштування</h3>
+      <p>Пріоритет виходу:</p>
+      <button onclick="setMode(1)">SOL (Сонце)</button>
+      <button onclick="setMode(2)">UTI (Мережа)</button>
+      <button onclick="setMode(3)">SBU (Економ)</button>
+    </div>
+
+    <script>
+      const ctx = document.getElementById("mainChart").getContext("2d");
+      const chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            { label: "АКБ (V)", data: [], borderColor: "#4CAF50", yAxisID: "y" },
+            { label: "Навантаження (W)", data: [], borderColor: "#FF5252", yAxisID: "y1" }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: "index", intersect: false },
+          scales: {
+            y: { type: "linear", display: true, position: "left", min: 20, max: 30 },
+            y1: { type: "linear", display: true, position: "right", grid: { drawOnChartArea: false } }
+          }
+        }
+      });
+
+      async function refresh() {
+        try {
+          let res = await fetch("/api/status");
+          let data = await res.json();
+
+          if (data.battery_v) {
+            document.getElementById("bat_v").innerText = data.battery_v.toFixed(1);
+            document.getElementById("load_w").innerText = data.load_power;
+
+            let gridVal = data.grid_power;
+            let gridEl = document.getElementById("grid_w");
+            gridEl.innerText = Math.abs(gridVal);
+            gridEl.className = gridVal > 0 ? "val positive" : "val negative";
+            document.getElementById("grid_dir").innerText = gridVal > 0 ? "Продаж" : "Купівля";
+          }
+        } catch (e) {}
+      }
+
+      async function loadHistory() {
+        let res = await fetch("/api/history?hours=12");
+        let data = await res.json();
+
+        chart.data.labels = data.map((d) =>
+          new Date(d.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        );
+        chart.data.datasets[0].data = data.map((d) => d.battery_v);
+        chart.data.datasets[1].data = data.map((d) => d.load_power);
+        chart.update();
+      }
+
+      async function setMode(val) {
+        if (!confirm("Перемкнути режим інвертора?")) return;
+        await fetch("/api/set", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: "set_output_priority", value: val })
+        });
+        alert("Команда відправлена!");
+      }
+
+      setInterval(refresh, 2000);
+      loadHistory();
+      setInterval(loadHistory, 60000);
+    </script>
+  </body>
+</html>
