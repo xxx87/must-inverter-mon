@@ -87,3 +87,6 @@ inverter_data.db
 .idea
 .vscode
 .cursor
+
+package-lock.json
+yarn.lock
