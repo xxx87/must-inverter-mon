@@ -73,6 +73,7 @@ dist
 # DynamoDB Local files
 .dynamodb/
 inverter_data.db
+inverter_data.json
 # TernJS port file
 .tern-port
 # Stores VSCode versions used for testing VSCode extensions

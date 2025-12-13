@@ -2,7 +2,8 @@ require("dotenv").config();
 
 const ModbusRTU = require("modbus-serial");
 const express = require("express");
-const sqlite3 = require("sqlite3").verbose();
+const low = require("lowdb");
+const FileSync = require("lowdb/adapters/FileSync");
 const mqtt = require("mqtt");
 const { InfluxDB, Point } = require("@influxdata/influxdb-client");
 const cors = require("cors");
@@ -66,20 +67,14 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// База даних (SQLite)
-const db = new sqlite3.Database("inverter_data.db");
-db.serialize(() => {
-  // Таблиця метрик
-  db.run(`CREATE TABLE IF NOT EXISTS history (
-        timestamp INTEGER,
-        battery_v REAL,
-        load_power INTEGER,
-        grid_power INTEGER,
-        solar_power INTEGER
-    )`);
-  // Очищення старих даних (> 7 днів)
-  db.run("DELETE FROM history WHERE timestamp < ?", Date.now() - 7 * 86400000);
-});
+const adapter = new FileSync("inverter_data.json");
+const db = low(adapter);
+db.defaults({ history: [] }).write();
+
+const sevenDaysAgo = Date.now() - 7 * 86400000;
+db.get("history").remove((item) => item.timestamp < sevenDaysAgo).write();
+
+let lastStatus = {};
 
 // MQTT & Influx
 const mqttClient = mqtt.connect(CONFIG.mqtt.url, CONFIG.mqtt);
@@ -175,12 +170,20 @@ function handleData(data) {
     }
   }
 
-  // B. SQLite (Пишемо історію для графіків на екрані)
-  // Сонячна потужність (приблизно) = Навантаження + Зарядка
-  // (Але краще знайти регістр PV Power, в CSV я бачив 25208 Charger Power, але він часто бреше. Можна обчислити.)
-  const stmt = db.prepare("INSERT INTO history VALUES (?, ?, ?, ?, ?)");
-  stmt.run(data.timestamp, data.battery_v, data.load_power, data.grid_power, 0); // 0 поки для PV
-  stmt.finalize();
+  lastStatus = data;
+
+  db.get("history")
+    .push({
+      timestamp: data.timestamp,
+      battery_v: data.battery_v,
+      load_power: data.load_power,
+      grid_power: data.grid_power,
+      solar_power: 0
+    })
+    .write();
+
+  const sevenDaysAgo = Date.now() - 7 * 86400000;
+  db.get("history").remove((item) => item.timestamp < sevenDaysAgo).write();
 
   // C. InfluxDB
   if (influxWriteApi) {
@@ -195,23 +198,20 @@ function handleData(data) {
 
 // --- REST API ДЛЯ FRONTEND ---
 
-// Поточний стан
 app.get("/api/status", (req, res) => {
-  // Повертаємо останній відомий стан (краще кешувати в змінну, але можна і з БД взяти останній)
-  db.get("SELECT * FROM history ORDER BY timestamp DESC LIMIT 1", (err, row) => {
-    res.json(row || {});
-  });
+  const history = db.get("history").value();
+  const last = history.length > 0 ? history[history.length - 1] : null;
+  res.json(last || lastStatus || {});
 });
 
-// Історія для графіків (за останні N годин)
 app.get("/api/history", (req, res) => {
   const hours = req.query.hours || 6;
   const limit = Date.now() - hours * 3600 * 1000;
-  // Беремо кожен 10-й запис, щоб не перевантажити графік, якщо даних багато
-  db.all("SELECT * FROM history WHERE timestamp > ? ORDER BY timestamp ASC", [limit], (err, rows) => {
-    // Прорежування можна зробити тут, якщо rows.length > 1000
-    res.json(rows);
-  });
+  const all = db.get("history").value();
+  const rows = all
+    .filter((item) => item.timestamp > limit)
+    .sort((a, b) => a.timestamp - b.timestamp);
+  res.json(rows);
 });
 
 // Управління (POST /api/set)
