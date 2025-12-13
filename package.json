@@ -4,7 +4,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "rebuild": "npm rebuild sqlite3 @serialport/bindings-cpp",
+    "rebuild": "npm rebuild sqlite3 serialport",
     "install:pi": "JOBS=1 npm install --build-from-source",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop must-inverter",
