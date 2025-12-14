@@ -72,7 +72,9 @@ const db = low(adapter);
 db.defaults({ history: [] }).write();
 
 const sevenDaysAgo = Date.now() - 7 * 86400000;
-db.get("history").remove((item) => item.timestamp < sevenDaysAgo).write();
+db.get("history")
+  .remove((item) => item.timestamp < sevenDaysAgo)
+  .write();
 
 let lastStatus = {};
 
@@ -151,7 +153,11 @@ async function startLoop() {
     }
   } catch (e) {
     console.error("КРИТИЧНА ПОМИЛКА (ПЕРЕЗАПУСК):", e.message);
-    client.close();
+    if (client.isOpen) {
+      client.close(() => {
+        console.log("Порт закрито, перезапуск через 5 сек...");
+      });
+    }
     setTimeout(startLoop, 5000);
   }
 }
@@ -183,7 +189,9 @@ function handleData(data) {
     .write();
 
   const sevenDaysAgo = Date.now() - 7 * 86400000;
-  db.get("history").remove((item) => item.timestamp < sevenDaysAgo).write();
+  db.get("history")
+    .remove((item) => item.timestamp < sevenDaysAgo)
+    .write();
 
   // C. InfluxDB
   if (influxWriteApi) {
@@ -208,9 +216,7 @@ app.get("/api/history", (req, res) => {
   const hours = req.query.hours || 6;
   const limit = Date.now() - hours * 3600 * 1000;
   const all = db.get("history").value();
-  const rows = all
-    .filter((item) => item.timestamp > limit)
-    .sort((a, b) => a.timestamp - b.timestamp);
+  const rows = all.filter((item) => item.timestamp > limit).sort((a, b) => a.timestamp - b.timestamp);
   res.json(rows);
 });
 
