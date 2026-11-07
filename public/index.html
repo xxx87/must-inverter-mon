@@ -88,6 +88,16 @@
         <div class="label">Статус</div>
         <div class="val" style="font-size: 1.5em; color: #ffc107" id="status">Сканування...</div>
       </div>
+      <div class="card">
+        <div class="label">Bat1 SoC</div>
+        <div class="val" id="bat1_soc">--</div>
+        <div class="label"><span id="bat1_detail">V / A</span></div>
+      </div>
+      <div class="card">
+        <div class="label">Bat2 SoC</div>
+        <div class="val" id="bat2_soc">--</div>
+        <div class="label"><span id="bat2_detail">V / A</span></div>
+      </div>
     </div>
 
     <div class="card" style="margin-top: 15px">
@@ -137,6 +147,18 @@
             gridEl.innerText = Math.abs(gridVal);
             gridEl.className = gridVal > 0 ? "val positive" : "val negative";
             document.getElementById("grid_dir").innerText = gridVal > 0 ? "Продаж" : "Купівля";
+          }
+          const b1 = data.batteries && data.batteries.battery1;
+          const b2 = data.batteries && data.batteries.battery2;
+          if (b1) {
+            document.getElementById("bat1_soc").innerText = b1.soc + "%";
+            document.getElementById("bat1_detail").innerText =
+              b1.voltage + "V / " + b1.current + "A";
+          }
+          if (b2) {
+            document.getElementById("bat2_soc").innerText = b2.soc + "%";
+            document.getElementById("bat2_detail").innerText =
+              b2.voltage + "V / " + b2.current + "A";
           }
         } catch (e) {}
       }
