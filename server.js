@@ -29,7 +29,7 @@ const CONFIG = {
     url: process.env.INFLUX_URL,
     token: process.env.INFLUX_TOKEN || "",
     org: process.env.INFLUX_ORG || "",
-    bucket: process.env.INFLUX_BUCKET || "solar_bucket"
+    bucket: process.env.INFLUX_BUCKET || "home-assistant"
   },
   pollInterval: parseInt(process.env.POLL_INTERVAL) || 5000,
   bms: {
@@ -93,13 +93,18 @@ let lastBatteries = {};
 // MQTT & Influx
 const mqttClient = mqtt.connect(CONFIG.mqtt.url, CONFIG.mqtt);
 let influxWriteApi = null;
+function writeInfluxPoint(point) {
+  if (!influxWriteApi) return;
+  influxWriteApi.writePoint(point);
+  influxWriteApi.flush().catch((e) => console.error("[Influx] flush:", e.message || e));
+}
 if (CONFIG.influx.enabled) {
-  console.log(
-    `[Influx] enabled → ${CONFIG.influx.url} org=${CONFIG.influx.org} bucket=${CONFIG.influx.bucket}`
-  );
   const influxDB = new InfluxDB({ url: CONFIG.influx.url, token: CONFIG.influx.token });
   influxWriteApi = influxDB.getWriteApi(CONFIG.influx.org, CONFIG.influx.bucket, "ms");
   influxWriteApi.useDefaultTags({ source: "must-inverter" });
+  console.log(
+    `[Influx] enabled → ${CONFIG.influx.url} org=${CONFIG.influx.org} bucket=${CONFIG.influx.bucket}`
+  );
 } else {
   console.log("[Influx] disabled");
 }
@@ -130,6 +135,20 @@ bmsPoller.on("data", (data) => {
   for (const [key, value] of Object.entries(flat)) {
     if (value !== undefined && value !== null) {
       mqttClient.publish(`${base}/${key}`, String(value));
+    }
+  }
+  if (influxWriteApi) {
+    try {
+      const point = new Point("bms_status").tag("battery", data.id);
+      if (typeof data.soc === "number") point.intField("soc", Math.round(data.soc));
+      if (typeof data.voltage === "number") point.floatField("voltage", data.voltage);
+      if (typeof data.current === "number") point.floatField("current", data.current);
+      if (typeof data.power === "number") point.floatField("power", data.power);
+      if (typeof data.temperature === "number") point.floatField("temperature", data.temperature);
+      if (typeof data.capacity_ah === "number") point.floatField("capacity_ah", data.capacity_ah);
+      writeInfluxPoint(point);
+    } catch (e) {
+      console.error("[Influx] bms write:", e.message || e);
     }
   }
 });
@@ -264,8 +283,7 @@ function handleData(data) {
       if (typeof data.battery_current === "number" && !Number.isNaN(data.battery_current)) {
         point.floatField("battery_current", data.battery_current);
       }
-      influxWriteApi.writePoint(point);
-      influxWriteApi.flush().catch((e) => console.error("[Influx] flush:", e.message || e));
+      writeInfluxPoint(point);
     } catch (e) {
       console.error("[Influx] write:", e.message || e);
     }
